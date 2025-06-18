@@ -1,0 +1,374 @@
+3 2911 router
+im enabling serial interfaces because im using SERIAL DCE wire.
+each router got one switch
+so 3 switches in total.
+3 floors
+1st floor = 1 router 1 switch and 3 deparments. Each department got 1 pc and 1 printer
+2nd floor = 1 router 1 switch and 3 deparments. Each department got 1 pc and 1 printer
+3rd floor = 1 router 1 switch and 2 deparments. Each department got 1 pc and 1 printer
+Each floor got its own Access point aswell. (AP-PT Access Point).
+
+
+Each dept got different VLAN.
+
+1st Floor got the following:
+-Reception VLAN 80, Network of 192.168.8.0/24
+-Store VLAN 70, Network of 192.168.7.0/24
+-Logistic VLAN 60, Network of 192.168.6.0/24
+
+
+
+
+
+
+Configuration:
+Because we used DCE cable and for traffic distribtuin we must enable clockrate at serial DCE interface.
+we will also need to turn up interface because theyre in red state right now.
+
+At ThirdFloorRouter I did: ( no sh means no shutdown )
+Enable
+config t
+int se0/2/0
+no sh
+int se0/2/1
+no sh
+int gig0/0
+no sh
+int se0/2/0
+clock rate
+clock rate 64000
+int se0/2/1
+clock rate 64000
+do wr
+
+At SecondFloorRouter I did:
+Enable
+config t
+int se0/2/0
+no sh
+int 0/2/1
+no sh
+int gig0/0
+no sh
+
+3rd floor pe 
+se0/1/0
+se0/1/1
+int gig0/0
+
+===============================================SWITCHES CONFIGURATION===========================================
+
+FirstFloorSwitch Configuration: (Configing VLANS)
+[ Side Note = 
+Fa0/2 = Fa0 (VLAN80) 2-5
+Fa0/3 = Fa0 (VLAN70) 3-4
+Fa0/6 = Fa0 (VLAN60) 6-8
+en
+config t
+int range fa0/2-5
+switchport mode access
+switchport access vlan 80
+int range fa0/3-4
+switchport mode access
+switchport access vlan 70
+int range fa0/6-8
+switchport mode access
+switchport access vlan 60
+do wr
+
+now for this switch to yk communicate with other switches/departments we wil do the following.
+int range fa0/1
+switchport mode trunk
+do wr
+
+
+SecondFloorSwitch Configuration: (Configing VLANS)
+Fa0/2 = Fa0 (VLAN50) 2-3
+Fa0/3 = Fa0 (VLAN40) 4-5
+Fa0/6 = Fa0 (VLAN30) 6-8
+ENABLE
+config t 
+int range fa0/2-3
+switchport mode access
+switchport access vlan 50
+int range fa0/4-5
+switchport mode access
+switchport access vlan 40
+int range fa0/6-8
+switchport mode access
+switchport access vlan 30
+do wr
+int range fa0/1
+switchport mode trunk
+do wr
+
+
+ThirdFloorSwitch Configuration: (Configing VLANS)
+Fa0/2 = Fa0 (VLAN10) 2-3
+Fa0/4 = Fa0 (VLAN20) 4-6
+ENABLE
+config t 
+int range fa0/2-3
+switchport mode access
+switchport access vlan 10
+int range fa0/4-6
+switchport mode access
+switchport access vlan 20
+do wr
+int range fa0/1
+switchport mode trunk
+do wr
+
+
+
+===============================================ROUTERS CONFIGURATION===========================================
+-First im starting with FirstFloorRouter
+I will need to configure interface for following given ips 10.10.10.4/30(se0/2/0) and 10.10.10.8/30(se0/2/1)
+Router(config-if) me likhunga ye sab
+// Note = 10.10.10.4/30 ye jo subnet 30 hy it means i have 2 hosts like .5 and .6
+int se0/2/0
+ip address 10.10.10.5 255.255.255.252
+int se0/2/1
+ip address 10.10.10.9 255.255.255.252 
+do wr
+(9 because 10.10.10.8/30)
+
+-SecondRouter
+here i have interface se0/1/1 = 10.10.10.8 and se0/1/0 = 10.10.10.0/30
+int se0/1/0
+ip address 10.10.10.1 255.255.255.252
+int se0/1/1
+ip address 10.10.10.10 255.255.255.252 
+why not .9? because se0/2/1 took .9 already nigga
+
+-ThirdRouter
+se0/2/1 = 10.10.10.0/30 and se0/2/0 = 10.10.10.4/30
+int se0/2/0 
+ip address 10.10.10.6 255.255.255.252
+int se0/2/1
+ip address 10.10.10.2 255.255.255.252
+do wr
+
+
+///////////////////////// Note : Remember to watch video of subnetting./////////////////////
+
+
+
+All devices in network should get IP address dynamically with their respective router which will be 
+configured as DHCP server.
+DHCP server goes with INTER-VLAN routing. Whenever we have so many vlans with does inter-vlan.
+
+
+
+-FirstRouter
+How do we create inter-vlan? We create sub-interfaces and we assign VLAN number and IP to those sub-interface and 
+that IP address will act as default gateway to that respective VLAN
+int gig0/0.80 (why .80? because VLAN 80 present of Reception) = Now sub-interface is created.
+encapsulation dot1Q 80
+ip address 192.168.8.1 255.255.255.0
+ex
+int gig0/0.70
+encapsulation dot1Q 70
+ip address 192.168.7.1 255.255.255.0
+ex
+int gig0/0.60
+encapsulation dot1Q 60
+ip address 192.168.6.1 255.255.255.0
+do wr
+
+Yk the purpose of this? now when we will lets give ip address to whole first fllor the pc from
+reception will be able to communicate with pc from logistics even tho THEYRE FROM DIFFERENT VLANS.
+
+
+Now lets configure/make DHCP server. 3 VLANS so we will make 3 ports
+service dhcp
+ip dhcp pool Reception
+network 192.168.8.0 255.255.255.0
+default-router 192.168.8.1 
+dns-server 192.168.8.1
+ex
+ip dhcp pool Stores
+network 192.168.7.0 255.255.255.0
+default-router 192.168.7.1 
+dns-server 192.168.7.1
+ex
+ip dhcp pool Logistics
+network 192.168.6.0 255.255.255.0
+default-router 192.168.6.1 
+dns-server 192.168.6.1
+ex
+
+Now DHCP is all set.
+Now if i click on any pc in first-floor and go to config>ip>check DHCP>Wait 5 sec>IP will assigned automatically.
+From-PC1-In-VLAN70-IM-ABLE-TO-PING-PC-PRESENT-IN-VLAN-80-Which-Means-INTERVLANSUCCESSFULL. (Paste this SS)
+
+
+-SecondRouter
+int gig0/0.30
+encapsulation dot1Q 30
+ip address 192.168.3.1 255.255.255.0
+ex
+int gig0/0.40
+encapsulation dot1Q 40
+ip address 192.168.4.1 255.255.255.0
+ex
+int gig0/0.50
+encapsulation dot1Q 50
+ip address 192.168.5.1 255.255.255.0
+ex
+do wr
+
+service dhcp
+ip dhcp pool Sales
+network 192.168.3.0 255.255.255.0
+default-router 192.168.3.1 
+dns-server 192.168.3.1
+ex
+ip dhcp pool HR
+network 192.168.4.0 255.255.255.0
+default-router 192.168.4.1 
+dns-server 192.168.4.1
+ex
+ip dhcp pool Finance
+network 192.168.5.0 255.255.255.0
+default-router 192.168.5.1 
+dns-server 192.168.5.1
+ex
+do wr
+
+-ThirdRouter
+int gig0/0.10
+encapsulation dot1Q 10
+ip address 192.168.1.1 255.255.255.0
+ex
+int gig0/0.20
+encapsulation dot1Q 20
+ip address 192.168.2.1 255.255.255.0
+ex
+do wr
+
+
+
+service dhcp
+ip dhcp pool IT
+network 192.168.1.0 255.255.255.0
+default-router 192.168.1.1 
+dns-server 192.168.1.1
+ex
+ip dhcp pool Admin
+network 192.168.2.0 255.255.255.0
+default-router 192.168.2.1 
+dns-server 192.168.2.1
+ex
+do wr
+
+
+=========================DHCP AND INTER VLAN ROUTING SUCCESSFULL==================================
+Now if i try to ping from PC present on first floor to pc present in third floor it wont be able to ping.
+for this ill have to put some routing protocol.
+
+-FirstRouter
+In this i have 5 networks.
+en
+config t
+router ospf 10
+network 10.10.10.4 255.255.255.252 area 0
+network 10.10.10.8 255.255.255.252 area 0
+network 192.168.8.0 255.255.255.0 area 0
+network 192.168.7.0 255.255.255.0 area 0
+network 192.168.6.0 255.255.255.0 area 0
+do wr
+
+
+-SecondRouter
+In this i have 5 networks.
+en
+config t
+router ospf 10
+network 10.10.10.0 255.255.255.252 area 0
+network 10.10.10.8 255.255.255.252 area 0
+network 192.168.3.0 255.255.255.0 area 0
+network 192.168.4.0 255.255.255.0 area 0
+network 192.168.5.0 255.255.255.0 area 0
+do wr
+
+
+-FirstRouter
+In this i have 4 networks.
+en
+config t
+router ospf 10
+network 10.10.10.0 255.255.255.252 area 0
+network 10.10.10.4 255.255.255.252 area 0
+network 192.168.1.0 255.255.255.0 area 0
+network 192.168.2.0 255.255.255.0 area 0
+do wr
+
+
+==========================NOW I CAN SUCCESSFULLY PING FROM ANY FLOOR TO ANY FLOOR=================================
+
+
+Now im addding wifi options for devices.
+Placing Laptop ( I'll turn off laptop first remove its module and replace with wireless module).
+Placing Tablet
+WifiName = AhmedHussain
+Password = Ahmed123
+How to establish wifi?
+Go to access point > config > port 1
+SSID = AhmedHussain
+Authenication = WPA2-PSK = Ahmed123
+Laptop>Config>WifiPc = Connect
+Tablet>Config>DefaultChange And WPA2-PSK = Connect
+
+
+-Floor1
+WifiName=AhmedHussainFirst
+WifiPass=Ahmed123
+
+-Floor2
+WifiName=AhmedHussain
+WifiPass=Ahmed123
+
+-Floor3
+WifiName=AhmedHussainThird
+WifiPass=Ahmed123
+
+
+
+
+
+=======================================Server Addition================================================
+A web server is introduced in Admin VLAN 20. To purpose is that admin will be able to access the portal.
+where admin will be able perform CRUD operations on doctor appoinments, operations, shifts etc. This server
+provides web-based access to Admin, demonstrationg real-world internet services in network.
+I put server on fa0/7 port.
+and then
+interface fa0/7
+ switchport mode access
+ switchport access vlan 20
+!
+interface fa0/1
+ switchport trunk allowed vlan add 20
+well this basically configured server for VLAN 20 and allowed access for trunk aswell.
+Web server uses HTTP and HTTPS protcol.
+
+
+HTTP (HyperText Transfer Protocol):
+The basic protocol used by web browsers to request and receive web pages from servers. It is not encrypted, meaning data is sent in plain text.
+HTTPS (HTTP Secure):
+HTTP combined with SSL/TLS encryption. It ensures data exchanged between client and server is encrypted and secure, preventing eavesdropping and tampering.
+
+Why are they important in your network?
+Accessing Web Services:
+If you host any web services on your server (e.g., intranet websites, admin portals, or management interfaces), devices on your VLANs or floors will use HTTP or HTTPS to access those sites
+.
+
+
+
+
+
+============================Router Access Verification=============================================
+Username = Ahmed
+Password = Ahmed123
+
+
